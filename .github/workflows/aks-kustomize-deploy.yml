@@ -1,0 +1,49 @@
+name: AKS Kustomize Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        run: |
+          az aks get-credentials \
+            --resource-group "$AKS_RESOURCE_GROUP" \
+            --name "$AKS_CLUSTER_NAME" \
+            --overwrite-existing
+        env:
+          AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
+          AKS_CLUSTER_NAME: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Validate cluster access
+        run: |
+          kubectl version --client
+          kubectl get nodes --no-headers
+
+      - name: Preview rendered Kustomize output
+        run: |
+          kubectl kustomize kustomize-lab/overlays/dev > rendered-kustomize.yaml
+          echo "Rendered YAML written to rendered-kustomize.yaml"
+
+      - name: Apply Kustomize overlay
+        run: |
+          kubectl apply -k kustomize-lab/overlays/dev
+
+      - name: Confirm deployment
+        run: |
+          kubectl get deploy -n dev
+          kubectl get svc -n dev
