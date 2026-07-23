@@ -6,6 +6,15 @@ on:
       - main
       - master
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target overlay environment'
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
 
 jobs:
   deploy:
@@ -19,11 +28,16 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Install kubelogin
+        run: |
+          az aks install-cli
+
       - name: Set AKS context
         run: |
           az aks get-credentials \
             --resource-group "$AKS_RESOURCE_GROUP" \
             --name "$AKS_CLUSTER_NAME" \
+            --admin \
             --overwrite-existing
         env:
           AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
@@ -36,14 +50,20 @@ jobs:
 
       - name: Preview rendered Kustomize output
         run: |
-          kubectl kustomize kustomize-lab/overlays/dev > rendered-kustomize.yaml
+          kubectl kustomize "$KUSTOMIZE_DIR" > rendered-kustomize.yaml
           echo "Rendered YAML written to rendered-kustomize.yaml"
+        env:
+          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment }}
 
       - name: Apply Kustomize overlay
         run: |
-          kubectl apply -k kustomize-lab/overlays/dev
+          kubectl apply -k "$KUSTOMIZE_DIR"
+        env:
+          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment }}
 
       - name: Confirm deployment
         run: |
-          kubectl get deploy -n dev
-          kubectl get svc -n dev
+          kubectl get deploy -n "$NAMESPACE"
+          kubectl get svc -n "$NAMESPACE"
+        env:
+          NAMESPACE: ${{ github.event.inputs.environment }}

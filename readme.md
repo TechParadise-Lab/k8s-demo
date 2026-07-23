@@ -177,7 +177,49 @@ Configure these secrets in the repository settings:
 - `AKS_RESOURCE_GROUP` - the AKS cluster resource group
 - `AKS_CLUSTER_NAME` - the AKS cluster name
 
-### 5.3 Create authentication for the pipeline
+Sample secret values:
+
+- `AKS_RESOURCE_GROUP`: `my-aks-rg`
+- `AKS_CLUSTER_NAME`: `my-aks-cluster`
+- `AZURE_CREDENTIALS`: JSON text like:
+
+```json
+{
+  "clientId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "clientSecret": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "subscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "tenantId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+  "resourceManagerEndpointUrl": "https://management.azure.com/",
+  "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+  "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+  "galleryEndpointUrl": "https://gallery.azure.com/",
+  "managementEndpointUrl": "https://management.core.windows.net/"
+}
+```
+
+### 5.3 What authentication to use for local accounts with Kubernetes RBAC
+
+For an AKS cluster configured with local accounts and Kubernetes RBAC, use an Azure service principal from GitHub Actions to authenticate to Azure and fetch cluster credentials.
+
+The workflow should:
+
+1. log in to Azure using `AZURE_CREDENTIALS`
+2. run `az aks get-credentials` for the existing AKS cluster
+3. use the returned kubeconfig/local cluster user to run `kubectl apply -k`
+
+This means the pipeline uses Azure authentication for Azure resource access, while Kubernetes authentication is handled by the local account credentials embedded in the kubeconfig fetched from AKS.
+
+If the AKS cluster is AAD-enabled, the generated kubeconfig can require `kubelogin` as an exec plugin. In GitHub Actions this means the runner must install the CLI plugin before running `kubectl`.
+
+Example:
+
+```bash
+az aks install-cli
+az aks get-credentials --resource-group <aks-resource-group> --name <aks-cluster-name> --admin --overwrite-existing
+```
+
+### 5.4 Create authentication for the pipeline
 
 From a machine that can access your Azure subscription, run:
 
@@ -193,34 +235,55 @@ az ad sp create-for-rbac \
 
 Copy the JSON output and save it into GitHub as `AZURE_CREDENTIALS`.
 
-### 5.4 Required permissions
+### 5.5 Required permissions
 
 The service principal must have permission to:
 
 - access the AKS cluster resource via Azure RBAC
-- request cluster credentials via `az aks get-credentials`
+- request cluster credentials using `az aks get-credentials`
 - deploy Kubernetes resources with `kubectl apply`
 
-The `Azure Kubernetes Service Cluster User Role` is the least-privilege Azure role for this pipeline. If you need broader repository or resource-group-level deployment permissions, use `Contributor` scoped to the AKS resource group.
+The `Azure Kubernetes Service Cluster User Role` is the least-privilege Azure role that allows credential requests. If you need broader deployment permissions on the AKS resource group, use `Contributor` scoped to the resource group.
 
-### 5.5 AKS cluster RBAC notes
+### 5.6 Kubernetes RBAC for local AKS accounts
 
-If the cluster uses Azure AD-managed Kubernetes RBAC, the service principal may also need a Kubernetes cluster role binding that allows it to apply resources.
+When the cluster uses local accounts with Kubernetes RBAC, the kubeconfig user created by `az aks get-credentials` still needs Kubernetes RBAC rights.
 
-For example, run once from an administrator session:
+To inspect the local user name added to kubeconfig:
+
+```bash
+az aks get-credentials --resource-group <aks-resource-group> --name <aks-cluster-name> --overwrite-existing
+kubectl config view --minify -o jsonpath='{.users[0].name}'
+```
+
+Grant deployment permissions to that local user, for example in the `dev` namespace:
+
+```bash
+kubectl create rolebinding github-actions-dev-edit \
+  --clusterrole=edit \
+  --user <cluster-user-name> \
+  --namespace dev
+```
+
+If you want to give cluster-wide access for pipeline testing:
 
 ```bash
 kubectl create clusterrolebinding github-actions-aks-deploy \
   --clusterrole=cluster-admin \
-  --user <service-principal-app-id>
+  --user <cluster-user-name>
 ```
 
-### 5.6 Deploying other overlays
+Use the least-privilege option that still allows `kubectl apply -k` to update the target namespace.
 
-To deploy a different overlay, update the workflow file path in the `kubectl apply -k` step to:
+### 5.7 Deploying other overlays
 
-```yaml
-kubectl apply -k kustomize-lab/overlays/prod
-```
+This workflow now supports `workflow_dispatch` input for `environment`, so you can choose `dev` or `prod` when manually starting the run.
 
-If you want to deploy both environments from GitHub, add separate workflow jobs or use `workflow_dispatch` inputs for `dev` and `prod`.
+In GitHub Actions, click **Actions → AKS Kustomize Deploy → Run workflow** and choose either `dev` or `prod`.
+
+The workflow will use:
+
+- `kustomize-lab/overlays/dev` for `dev`
+- `kustomize-lab/overlays/prod` for `prod`
+
+This also means the namespace used for validation is the same as the selected overlay.
