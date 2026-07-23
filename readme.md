@@ -260,6 +260,8 @@ az aks get-credentials --resource-group <aks-resource-group> --name <aks-cluster
 kubectl config view --minify -o jsonpath='{.users[0].name}'
 ```
 
+The user shown in the output is the Kubernetes identity used by the pipeline. The `kubectl get nodes` step fails if that identity does not have cluster-scoped read access.
+
 Grant deployment permissions to that local user, for example in the `dev` namespace:
 
 ```bash
@@ -269,13 +271,25 @@ kubectl create rolebinding github-actions-dev-edit \
   --namespace dev
 ```
 
-If you want to give cluster-wide access for pipeline testing:
+If you want the pipeline user to create namespaces and manage resources cluster-wide, use a cluster-scoped binding instead of a namespace-scoped `RoleBinding`.
 
 ```bash
 kubectl create clusterrolebinding github-actions-aks-deploy \
   --clusterrole=cluster-admin \
   --user <cluster-user-name>
 ```
+
+For a more limited but still cluster-wide option, bind the `edit` cluster role to the pipeline user:
+
+```bash
+kubectl create clusterrolebinding github-actions-aks-edit \
+  --clusterrole=edit \
+  --user <cluster-user-name>
+```
+
+This allows the pipeline identity to create namespaces and apply resources across the cluster, while still staying narrower than `cluster-admin`.
+
+If the workflow uses `kubectl get ns` and `kubectl apply -k`, the service account or local user in the kubeconfig should at minimum have access to the target namespace and the `Deployment` and `Service` resources there.
 
 Use the least-privilege option that still allows `kubectl apply -k` to update the target namespace.
 

@@ -45,7 +45,9 @@ jobs:
       - name: Validate cluster access
         run: |
           kubectl version --client
-          kubectl get nodes --no-headers
+          kubectl get ns "$NAMESPACE"
+        env:
+          NAMESPACE: ${{ github.event.inputs.environment }}
 
       - name: Preview rendered Kustomize output
         run: |
