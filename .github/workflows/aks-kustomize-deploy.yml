@@ -47,24 +47,24 @@ jobs:
           kubectl version --client
           kubectl get ns "$NAMESPACE"
         env:
-          NAMESPACE: ${{ github.event.inputs.environment }}
+          NAMESPACE: ${{ github.event.inputs.environment || 'dev' }}
 
       - name: Preview rendered Kustomize output
         run: |
           kubectl kustomize "$KUSTOMIZE_DIR" > rendered-kustomize.yaml
           echo "Rendered YAML written to rendered-kustomize.yaml"
         env:
-          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment }}
+          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment || 'dev' }}
 
       - name: Apply Kustomize overlay
         run: |
           kubectl apply -k "$KUSTOMIZE_DIR"
         env:
-          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment }}
+          KUSTOMIZE_DIR: kustomize-lab/overlays/${{ github.event.inputs.environment || 'dev' }}
 
       - name: Confirm deployment
         run: |
           kubectl get deploy -n "$NAMESPACE"
           kubectl get svc -n "$NAMESPACE"
         env:
-          NAMESPACE: ${{ github.event.inputs.environment }}
+          NAMESPACE: ${{ github.event.inputs.environment || 'dev' }}
