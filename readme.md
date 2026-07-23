@@ -243,7 +243,11 @@ The service principal must have permission to:
 - request cluster credentials using `az aks get-credentials`
 - deploy Kubernetes resources with `kubectl apply`
 
-The `Azure Kubernetes Service Cluster User Role` is the least-privilege Azure role that allows credential requests. If you need broader deployment permissions on the AKS resource group, use `Contributor` scoped to the resource group.
+The `Azure Kubernetes Service Cluster User Role` is the least-privilege Azure role that allows normal cluster credential requests for a non-admin workflow.
+
+If you specifically need to retrieve admin credentials with `az aks get-credentials --admin`, assign the `Azure Kubernetes Service Cluster Admin Role` to the service principal at the AKS cluster scope.
+
+For broader resource-group-level access during testing, `Contributor` scoped to the AKS resource group can also be used.
 
 ### 5.6 Kubernetes RBAC for local AKS accounts
 

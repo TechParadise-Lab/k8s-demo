@@ -37,7 +37,6 @@ jobs:
           az aks get-credentials \
             --resource-group "$AKS_RESOURCE_GROUP" \
             --name "$AKS_CLUSTER_NAME" \
-            --admin \
             --overwrite-existing
         env:
           AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
